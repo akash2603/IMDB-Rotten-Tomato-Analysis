@@ -1,0 +1,652 @@
+---
+title: "Imdb  Rotten Tomato Movie Analysis"
+author: "Akash Barnwal"
+date: "November 25, 2016"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+The movie *"The Imitation Game"* was one of the most promising movie of the year 2014 but the IMDB score of the movie was a mere *8.1*. The movie comes with a great concept of cryptography and world war. The acting by "Benedict Cumberbatch" is fabulous too.There were good enough reasons for the movie to score a 9 rating at ImdB. What made the movie to not score that much? <br>
+
+<br>
+*Data is the new oil* and you can get reasons about everything and anything through data.These questions about movies triggered me to go further and do an analysis of *IMDB and Rotten Tomato data* looking into some deeper perspectives of certain things which can differentiate and bring changes not only to movie industry but everything around the world.<br><br>
+
+#### The first analysis is about how many movies are produced during the years. <br>
+```{r}
+# Loading the required library needed for the project
+
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(data.table)
+library(formattable)
+library(readr)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+library(ggthemes)
+```
+
+```{r}
+imdb_movie_data <- read.csv("https://raw.githubusercontent.com/sundeepblue/movie_rating_prediction/master/movie_metadata.csv")
+
+# Removing the symbol "Â" from the movie title.
+
+imdb_movie_data$movie_title <- substr(as.character(imdb_movie_data$movie_title),
+                       start= 1, 
+                       stop= nchar(as.character(imdb_movie_data$movie_title) )-2 )
+
+```
+
+<!-- Checking for repeatitive movie name and removing them . We can see that the total names goes down from 5043 to 4917. Hence there were 126 repeatitive names. -->
+```{r}     
+  
+  duplicate_movie <- anyDuplicated(imdb_movie_data$movie_title)
+  imdb_movie_data<- imdb_movie_data[!duplicated(imdb_movie_data$movie_title),]
+  
+```
+
+<!-- Group Lens Data -->
+
+<!-- This page talks about the data in grouplens --
+>
+
+<!-- https://github.com/timyitong/mf.recommendation/blob/master/data/hetrec2011-movielens-2k-v2/readme.txt -->
+
+<!-- Downloading the rotten tomato movie data from the github. The file is in zip format hence using a temporary directory and storing the file there and then unzipping it. -->
+
+```{r}
+movie_grouplens<-"http://files.grouplens.org/datasets/hetrec2011/hetrec2011-movielens-2k-v2.zip"
+temp_dir <- tempdir()
+tempfile <- tempfile(tmpdir=temp_dir, fileext=".zip")
+download.file(movie_grouplens,tempfile)
+
+f<-unzip(tempfile,list = TRUE)$Name[c(1,2,3,4,5,6,7,8,9, 10, 11, 12, 13)]
+unzip(tempfile,files=f,exdir=temp_dir, overwrite=TRUE)
+fpath <- file.path(temp_dir, f)
+
+# The file "imdb_rotten" contains information about the movies of the database such as
+
+           # - Titles in Spanish
+   	       # - IMDb movie ids
+   	       # - IMDb picture URLs
+           # - Rotten Tomatoes movie ids
+           # - Rotten Tomatoes picture URLs
+           # - Rotten Tomatoes (all/top) critics' ratings, avg. scores, numbers of 
+           # - reviews/fresh_scores/rotten_scores
+           # - Rotten Tomatoes audience' avg. ratings, number of ratings, avg. scores
+
+imdb_rotten <-read.delim(fpath[8], header=TRUE,sep="\t")
+
+ # This file contains the genres of the movies.
+movie_genres <- read.delim(fpath[5], header=TRUE,sep="\t")
+
+# This file contains the directors of the movies.
+movie_directors <- read.delim(fpath[4], header=TRUE,sep="\t")
+
+# This file contains the main actores and actresses of the movies. A ranking is given to the actors and actress according to their imdb cast web page.
+movie_actors <- read.delim(fpath[2], header=TRUE,sep="\t")
+
+# This file contains the countries of origin of the movies.
+movie_countries <- read.delim(fpath[3], header=TRUE,sep="\t")
+
+# This file contains filming locations ot the movies.
+movie_locations <- read.delim(fpath[6], header=TRUE,sep="\t")
+```
+
+<!-- Checking for repeatitive movie name in rotten tomato database and removing them . We can see that the total names goes down from 10197 to 9406 Hence there were 791 repeatitive names. -->
+```{r}
+duplicate_movie <- anyDuplicated(imdb_rotten$title)
+imdb_rotten<- imdb_rotten[!duplicated(imdb_rotten$title),]
+```
+
+```{r}
+
+# Merging IMDB and Rotten tomato database through "movie title"" so that a common analysis can be done later.
+merge_imdb_rotten <- merge(imdb_movie_data, imdb_rotten, by.x = "movie_title", by.y = "title")
+
+# A total of 2656 movies name are in common in between IMDB and Rotten Tomato Analysis. There are times when I will be playing with just the imdb database since there are a lot number of record present in them.
+
+```
+
+
+<!-- Its important to figure out how many movies were analysed in between rotten tomato and IMDB.  -->
+
+```{r}
+
+# Checking whether how many movies were reviewed in common between Rotten Tomato and Imdb database.
+
+# Initial step would be selecting the movie title and the years and then grouping them together based on year.
+movie_year <- merge_imdb_rotten %>% select(movie_title, title_year) %>% group_by(title_year) 
+
+# Now summarising the table and then removing the NA's values,
+movie_year <- movie_year %>% dplyr::summarise(n=n())  %>% na.omit()
+
+# Arranging the movies in descending order
+p <-arrange(movie_year, desc(n))
+
+colnames(p)[1] <- "Year"
+colnames(p)[2] <-"Count of Movies"
+
+kable(head(p,4))
+```
+
+
+```{r}
+# Plotting a graph between the year and number of movies which had been seen.
+ggplot(movie_year, aes(title_year,n)) +  geom_line() +  ggtitle("Number of Movies by Year")+
+  labs(x="Number of Movies",y="Year")  + theme(plot.subtitle = element_text(vjust = 1), 
+    plot.caption = element_text(vjust = 1), 
+    panel.grid.major = element_line(linetype = "dashed"), 
+    panel.grid.minor = element_line(linetype = "dashed"), 
+    axis.text = element_text(family = "mono", 
+        colour = "gray0"), axis.text.x = element_text(family = "serif"), 
+    panel.background = element_rect(fill = "gray87", 
+        colour = "brown", linetype = "twodash"), 
+    plot.background = element_rect(fill = "bisque", 
+        colour = "blueviolet", linetype = "dashed")) + theme(plot.subtitle = element_text(colour = "gray54"), 
+    legend.text = element_text(face = "bold", 
+        family = "mono"), legend.title = element_text(face = "bold"), 
+    plot.background = element_rect(colour = "blue2"))
+```
+<br>
+**Comment:** The highest number of movies produced were in the year **2002**, with total movies in that year being  **185**. The trend seems to be exponential. After a certain point of time the number of movies have fallen.<br><br>
+
+####Directors are the crux of the movie industry and its important to understand which director have a good rating and which director haven't performed well. This analysis contains the IMDB rating of directors who have done more than *4 movies*.<br>
+
+```{r}
+dir_imdb_rating <- merge_imdb_rotten %>% group_by(director_name) %>% mutate(.,no_rows = length(director_name))
+
+dir_imdb <- dir_imdb_rating %>% select(director_name, imdb_score, no_rows)  %>% 
+            filter(., no_rows > 4) %>% summarise_each(funs(mean(., na.rm=TRUE)))
+ 
+dir_imdb <- dir_imdb %>% arrange(desc(imdb_score))  
+
+dir_imdb <- dir_imdb[1:5,] %>% na.omit()
+dir_imdb1 <- dir_imdb %>% select(director_name, imdb_score)
+
+colnames(dir_imdb1)[1] <- "Director Name"
+colnames(dir_imdb1)[2] <- "IMDB Score"
+
+kable(dir_imdb1)
+
+```
+
+**Comment:** **Christopher Nolan** has the highest IMDB ranking followed by **Peter Jackson** then **Frank Capra** <br><br>
+
+####The virality of *Social Media* cant be ignored. The data contains the facebook likes of directors, movie stars and how many people have liked a movie on Facebook. The below analysis will explain whether the IMDB and Rotten Tomato scores are dependent on facebook likes of  directors, actors and movie likes.<br><br>
+
+```{r}
+movie_facebook <- merge_imdb_rotten %>% select(movie_facebook_likes,imdb_score,content_rating)
+plot_ly(movie_facebook, x = movie_facebook$movie_facebook_likes, y = movie_facebook$imdb_score,
+        color =movie_facebook$content_rating,
+        mode = "markers",text=paste('Content:',movie_facebook$content_rating)) %>% 
+        layout(title = "Movie Facebook Likes vs IMDB score",
+        xaxis = list(title = "Facebook Likes Of Movies"),
+        yaxis = list(title = "Imdb Score"))
+```
+
+<br><br>**Comment: **The scatter plot is divided by content-rating. We do not see any trend here. There seem to be movies that have high IMDB scores but low Facebook likes.<br><br>
+
+
+####Directors would want to spend on famous actors since there is an assurance of movies getting successful. Lets see whether the data says the same thing or not!<br><br>
+
+<!-- An analysis of whether producers spend more on famous actors? -->
+```{r}
+producers_cast <- merge_imdb_rotten %>% select(cast_total_facebook_likes,budget, movie_title,content_rating) %>% na.omit()
+
+plot_ly(producers_cast, x = producers_cast$cast_total_facebook_likes, 
+                        y = producers_cast$budget,
+                        color = producers_cast$content_rating , 
+                        mode = "markers",
+                        text=paste('Movie:',producers_cast$movie_title)) %>%
+        layout(title = "Famous Actor Indicator",
+         xaxis = list(title = "Cast Facebook Likes"),
+         yaxis = list(title = "Budget"))
+```
+<br>**Comment:** We can see that the movie **Feast** and **Quarantine** with the cast having the maximum facebook likes have very less budget so not much of conclusion can be made with this.<br><br>
+
+#### Correlation between number of likes for a director and IMDB score<br>
+```{r}
+likes_score_corr <- imdb_movie_data %>% select(director_facebook_likes,imdb_score,content_rating,movie_title)
+
+plot_ly(likes_score_corr, x = likes_score_corr$director_facebook_likes, y = likes_score_corr$imdb_score, 
+        color =likes_score_corr$content_rating, mode =  "markers",
+        text=paste('Movie:',likes_score_corr$movie_title)) %>%
+        layout(title = "Director vs IMDB score",
+              xaxis = list(title = "Director Facebook Likes"),
+              yaxis = list(title = "IMDB Score"))
+```
+<br>**Comment: **The graph shows no correlation between no of likes of a director and the IMDB score. Director of movie *The Shawshank Redemptions* **Martin Landau** has zero likes on facebook whereas the movie has great reviews.<br><br>
+
+####  Top 20 most Return of Investment percentage movies and directors<br>
+```{r}
+library(dplyr)
+
+imdb_rotten_countries <- merge(movie_countries, merge_imdb_rotten, by.x = "movieID", by.y = "id")
+most_profitable_movie <- imdb_rotten_countries %>% 
+  mutate(profit = gross - budget, return_investment_percentage = (profit/budget)*100)
+  
+top_20_profit <- most_profitable_movie %>% arrange(desc(return_investment_percentage)) %>% top_n(20, return_investment_percentage)
+
+library(ggrepel)
+ggplot(top_20_profit, aes(x=budget/1000000, y=return_investment_percentage, color = country.x)) + geom_point(size = 1) + geom_text_repel(aes(label = movie_title), size = 2) + xlab("Budget $million") + ylab("Retur of Investment ") + ggtitle("20 Most Return of Investment Movies") + theme(plot.subtitle = element_text(vjust = 1), 
+    plot.caption = element_text(vjust = 1), 
+    panel.grid.major = element_line(colour = "navajowhite4"), 
+    panel.grid.minor = element_line(colour = "wheat3"), 
+    panel.background = element_rect(colour = "antiquewhite1"), 
+    plot.background = element_rect(colour = "burlywood1"))+ theme_bw() + theme(panel.grid.major = element_line(colour = "azure1"), 
+    panel.grid.minor = element_line(colour = "azure1"), 
+    axis.title = element_text(face = "bold"), 
+    plot.title = element_text(family = "mono", 
+        face = "bold"), panel.background = element_rect(colour = "brown1"), 
+    plot.background = element_rect(colour = "brown1"), 
+    legend.background = element_rect(fill = "ivory4", 
+        colour = "azure4", linetype = "dashed")) + theme(panel.grid.major = element_line(colour = "white", 
+    linetype = "dashed"), panel.grid.minor = element_line(colour = "white", 
+    linetype = "dashed"), legend.text = element_text(face = "bold", 
+    family = "mono"), legend.title = element_text(face = "bold"), 
+    panel.background = element_rect(fill = "gray87", 
+        colour = "gray62", linetype = "twodash"), 
+    plot.background = element_rect(fill = "bisque", 
+        colour = "blue2", linetype = "dashed"), 
+    legend.key = element_rect(fill = "gray95"), 
+    legend.background = element_rect(fill = "gray100", 
+        linetype = "blank"))+ 
+    theme(plot.title = element_text(family = "sans"))
+```
+
+**Comment:** We can see that movie such as The Blair Witch Project, Tarnation are the biggest return of investment movies. Putting country makes us understand that USA has the maximum movies which had better ROI.<br><br>
+
+#### Top 20 most profitable directors<br>
+
+```{r}
+ # So our next question arises which are the most profitable directors in the movie industry. Definitely people would want to bank on these directors incase they make a movie or want to watch a movie.
+
+# Taking the data frame most_profitable_movie and using it identify the top directors
+
+Movie_directors_20 <- most_profitable_movie %>%  group_by(director_name) %>%
+  select(director_name, budget, gross, profit) %>%  na.omit() %>% 
+  summarise(films = n(), budget = sum(as.numeric(budget)), gross = sum(as.numeric(gross)), 
+  profit = sum(as.numeric(profit))) %>% 
+  arrange(desc(profit)) %>% 
+  top_n(20, profit)
+
+#Plot
+ggplot(Movie_directors_20, aes(x=films, y=profit/1000000)) + geom_point(size = 1) + geom_text_repel(aes(label = director_name), size = 2) + xlab("Number of Films") + ylab("Profit $millions") + ggtitle("Most Profitable Directors") + theme(plot.subtitle = element_text(vjust = 1), 
+    plot.caption = element_text(vjust = 1), 
+    axis.line = element_line(linetype = "solid"), 
+    axis.ticks = element_line(colour = "black"), 
+    axis.text = element_text(face = "bold"), 
+    plot.title = element_text(face = "bold"), 
+    panel.background = element_rect(colour = "goldenrod"), 
+    plot.background = element_rect(colour = "darkgoldenrod1")) + theme_economist() + theme(panel.grid.major = element_line(colour = "cornsilk2"), 
+    panel.grid.minor = element_line(colour = "cornsilk2"), 
+    axis.title = element_text(face = "bold"), 
+    legend.text = element_text(face = "bold", 
+        colour = "brown"), legend.title = element_text(family = "mono", 
+        colour = "brown"), panel.background = element_rect(fill = "honeydew2"), 
+    plot.background = element_rect(fill = "burlywood1"), 
+    legend.key = element_rect(colour = "brown"), 
+    legend.background = element_rect(colour = "brown", 
+        linetype = "dotdash")) + theme(panel.grid.major = element_line(colour = "white", 
+    size = 0.5, linetype = "dashed"), panel.grid.minor = element_line(linetype = "dashed"), 
+    plot.title = element_text(colour = "brown2"), 
+    panel.background = element_rect(fill = "gray87", 
+        colour = "brown", linetype = "twodash"), 
+    plot.background = element_rect(fill = "bisque", 
+        colour = "blue2", linetype = "dashed"))
+```
+
+**Comment:** **Steven Spielberg** turns out to be the most profitable director.<br><br>
+
+#### Lets dig a deeper analysis on Steven Speilberg --><br>
+```{r}
+Movie_Spielberg <- most_profitable_movie %>% filter(director_name == "Steven Spielberg") %>% 
+  select(title_year, profit, movie_title) %>% na.omit() %>% arrange(desc(title_year))
+  
+#Plot
+library(ggrepel)
+ggplot(Movie_Spielberg, aes(x=title_year, y=profit/1000000)) + geom_point() + geom_text_repel(aes(label = movie_title), size = 2) + xlab("Year") + ylab("Profit per Film $millions") + ggtitle("Steven Spielberg Films") + geom_hline(yintercept = 0, linetype = 3, alpha = 0.9) + geom_hline(yintercept = 100, linetype = 2, alpha = 0.6) + theme(plot.subtitle = element_text(vjust = 1), 
+    plot.caption = element_text(vjust = 1), 
+    panel.grid.major = element_line(colour = "white"), 
+    axis.title = element_text(face = "bold"), 
+    plot.title = element_text(size = 18, 
+        face = "bold", colour = "brown2"), 
+    legend.title = element_text(colour = "burlywood2"), 
+    panel.background = element_rect(colour = "gray75"), 
+    plot.background = element_rect(colour = "burlywood1")) + theme(panel.grid.major =   element_line(linetype = "dashed"), 
+    panel.grid.minor = element_line(linetype = "dashed"), 
+    plot.title = element_text(colour = "chocolate"), 
+    panel.background = element_rect(fill = "gray87", 
+        linetype = "twodash"), plot.background = element_rect(fill = "bisque", 
+        linetype = "dashed"))
+```
+
+**Comment: ** *ET- The Extra Terrestrial* movie has done well in terms of profit whereas the movie Bridge of Spies didnt do well. If we check the imdb ranking of both the movies Extra Terrestrial has 7.9 rating with four oscars whereas the movie "Bridge of Spies" has 7.6 rating.<br><br>
+
+
+<!-- 
+# Removing all the datas with "NA". All these missing values can create issues in calculation so either we should replace it with the mean value or remove them. -->
+```{r}
+row.has.na <- apply(imdb_movie_data, 1, function(x){any(is.na(x))})
+movies.filtered <- imdb_movie_data[!row.has.na,]
+```
+<br>
+
+#### Viewers likes and dislikes impacts business big time. Lets see the number of low grossing movies by year<br><br>
+```{r}
+# Lets select the important columns to be used for this analysis which are gross, budget and title_year.
+
+lt_gross <- imdb_movie_data %>% select(gross, budget,title_year)
+lt_gross$diff <- lt_gross$gross - lt_gross$budget
+lt_gross <- na.omit(lt_gross)
+
+# So wherever the difference is positive, it means that the movie is profitable hence giving it a value 1 or else it would be a 0 for non profitable movies.
+lt_gross$profit <- ifelse(lt_gross$diff<0,0,1)
+lt_gross <- lt_gross %>% group_by(title_year) %>% summarise(n=sum(profit=='0'))
+
+plot_ly(lt_gross, x = lt_gross$title_year, y = lt_gross$n, name = "Number of low grossing movies by Year",
+marker = list(size = 10,
+              color = 'rgba(255, 182, 193, .9)',
+              line = list(color = 'rgba(152, 0, 0, .8)',
+                          width = 2))) %>%
+  layout(title = 'Number of Low Grossing Movies by Year',
+         yaxis = list(zeroline = FALSE),
+         xaxis = list(zeroline = FALSE))
+```
+**Comment: **The largest number of low grossing movies were in between 2000 and 2010.<br><br>
+
+
+
+####Its important to understand what are the common themes on which movies are based on. Lets see the common plots on which the movies are based on using word cloud<br><br>
+
+<!-- Taking the important columns only for the word analysis -->
+
+<!-- Selecting the movie title, gross value, plot_keywords and imdb_score -->
+```{r}
+word_analysis <- imdb_movie_data %>% select(movie_title, gross, imdb_score, plot_keywords)
+word_analysis <- na.omit(word_analysis)
+```
+
+
+```{r}
+# segregating the plot keywords into different columns. Using the str_extract function to put it into a new column
+word_analysis$first_keyword <- str_extract(word_analysis[,"plot_keywords"],"[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*") 
+
+# Removing the keyword which had been taken from the parent column using str_replace
+
+word_analysis$plot_keywords <- word_analysis$plot_keywords %>% str_replace("[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*\\|", "")
+
+
+```
+
+
+```{r}
+# Second keyword in the plot_keyword column
+
+word_analysis$second_keyword <- str_extract(word_analysis[,"plot_keywords"],"[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*")
+
+
+
+word_analysis$plot_keywords <- word_analysis$plot_keywords %>% str_replace("[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*\\|", "")
+```
+
+
+```{r}
+# Thid Keyword in the plot keyword column
+word_analysis$third_keyword <- str_extract(word_analysis[,"plot_keywords"],"[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*")
+
+
+word_analysis$plot_keywords <- word_analysis$plot_keywords %>% str_replace("[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*\\|", "")
+
+```
+
+```{r}
+# Fourth keyword in the plot keyword column
+
+word_analysis$fourth_keyword <- str_extract(word_analysis[,"plot_keywords"],"[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*")
+
+
+word_analysis$plot_keywords <- word_analysis$plot_keywords %>% str_replace("[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*\\|", "")
+```
+
+```{r}
+# fifth keyword in the plot keyword column
+
+word_analysis$fifth_keyword <- str_extract(word_analysis[,"plot_keywords"],"[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*")
+
+
+word_analysis$plot_keywords <- word_analysis$plot_keywords %>% str_replace("[a-z0-9]+[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*[[:blank:]]*[a-z0-9]*\\|", "")
+View(word_analysis)
+
+
+```
+
+```{r}
+
+# Now taking all the keywords column and making a table for them
+words <- word_analysis[c(5:9)]
+
+# Putting them into a single column since we have to know which words have been used the most out of all the keywords
+words_complete <- stack(words)
+
+# We can see that some of the data have two to three sentences. So again dividing them into seperate columns and doing the analysis.
+
+setDT(words_complete)[, paste0("values", 1:4) := tstrsplit(values, " ")] 
+
+# Removing the na's from each of the column since it shouldnt be used for analysis and then making a table for each of the columns.
+
+word1 <- data.frame(words_complete$values1) %>% na.omit()
+word2 <- data.frame(words_complete$values2) %>% na.omit()
+word3 <- data.frame(words_complete$values3) %>% na.omit()
+word4 <- data.frame(words_complete$values4) %>% na.omit()
+
+
+# Renaming the column in each of the word1, word2, word3, word4 and giving them the same name.
+colnames(word1)[1] <- "Word"
+colnames(word2)[1] <- "Word"
+colnames(word3)[1] <- "Word"
+colnames(word4)[1] <- "Word"
+
+# merging all the tables together to get the aggregate list of words used in the plot_keyword
+final_word_list <- rbind(word1, word2, word3, word4)
+```
+
+
+```{r}
+
+# There are total of 30703 words in the plot_keyword. This makes a good dataset and now getting to know which words have been used the maximum for analysis would be interesting.
+
+
+# Load
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+
+docs <- Corpus(DataframeSource(final_word_list))
+
+docs <- tm_map(docs, content_transformer(tolower))
+
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, removeWords, c("in", "on", "of", "the", "to", "a","by"))
+
+
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, stripWhitespace)
+
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+top_ten_words <- head(d,10)
+
+# Plotting a word cloud for the same. The bigger word highlights the maximum frequency of the words used .
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=300, random.order=FALSE, rot.per=0.60, 
+          colors=brewer.pal(8, "Dark2"))
+```
+<br><br> **Comment:**WoW!! So here are the top words which movies are based on so we can say that most of the movies are based on "female based" or have love theme or related to friends.
+
+####Presenting the same analysis to get a more appropriate representation
+
+```{r}
+# Plotting a barchart for the same which indicates the exact no of times when a particular word is used 
+
+barplot(d[1:10,]$freq, las = 2, names.arg = d[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+```
+
+
+<!-- An analysis of which locations were the most prominent one where the movie were shot -->
+####Location seems to be an important factor for the analysis. Lets see what locations are the most prominent one where the movie was shot
+```{r}
+imdb_rotten_location <- merge(merge_imdb_rotten, movie_locations, by.x = "id", by.y = "movieID")
+
+location_word <- imdb_rotten_location %>% select(location1)
+
+count_location <- na.omit(location_word)
+
+count_location$location1 <- as.character(count_location$location1)
+
+count_location <- Corpus(DataframeSource(count_location))
+
+count_location <- tm_map(count_location, content_transformer(tolower))
+
+count_location <- tm_map(count_location, removeNumbers)
+
+count_location <- tm_map(count_location, removeWords, stopwords("english"))
+
+count_location <- tm_map(count_location, removeWords, c("in", "on", "of", "the", "to", "a","by"))
+
+count_location <- tm_map(count_location, removePunctuation)
+
+count_location <- tm_map(count_location, stripWhitespace)
+
+dtm <- TermDocumentMatrix(count_location)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+# WoW!! So here are the top ten words which movies are based on so we can say that most of the movies are based on "female based" or have love theme or related to friends.
+
+# Plotting a word cloud for the same. The bigger word highlights the maximum frequency of the words used .
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=300, random.order=FALSE, rot.per=0.60, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+<br>**Comment: ** USA is one of the highest shot locations.
+
+####Plotting a barchart for the same which indicates the exact no of times where a particular movie has been shot
+```{r}
+barplot(d[1:10,]$freq, las = 2, names.arg = d[1:10,]$word,
+        col ="lightblue", 
+        main ="Most frequent Countries",
+        ylab = "Word frequencies")
+```
+<br>**Comment: ** A list of countries name where the movies were shot. USA tops the list followed by Canada, Australia and France.<br><br>
+
+
+Its important to have analysis based on user input. The below interface gives you an analysis of No of Movies Per year based on Audience Rating, Critics Rating, Country Input, FaceNumber Changes etc.
+
+```{r}
+
+# Lets use rshiny to see how many movies have  been reviewed yearwise per country
+
+ui <- fluidPage(
+  titlePanel("No of Movies Reviewed Year Wise Per Country"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("yearInput", 
+                  "Year", 
+                  min = 1916, 
+                  max = 2016, 
+                  value = c(1916, 2016)
+                  
+      ),
+      sliderInput("criticsInput", "Critics Rating", min=10,max= 90, value=c(10,90), step = 10),
+      sliderInput("AudienceInput", "Audience Rating", min = 0, max = 32, value = c(0,32), step = 5),
+      textInput("countryinput", "Country"),
+      helpText("Please Input Either USA, UK OR Australia in the country name"),
+      sliderInput("facenumber_in_poster", "No of Faces",min=0, max=15, value=c(0,15), step = 3)),
+    
+    mainPanel(
+      plotOutput("main_plot"),
+      tableOutput("results")
+    )
+  )
+)
+
+library(dplyr)
+library(ggthemes)
+
+server <- function(input, output, session) {
+  reduced_df <- reactive({
+    
+    merge_imdb_rotten$title_year <- as.integer(merge_imdb_rotten$title_year)
+    merge_imdb_rotten$rtAllCriticsRating <- as.integer(merge_imdb_rotten$rtAllCriticsRating)
+    merge_imdb_rotten$rtAudienceRating <- as.integer(merge_imdb_rotten$rtAudienceRating)
+    
+    
+    
+    filter(
+      merge_imdb_rotten, 
+      country == input$countryinput,
+      rtAllCriticsRating  >= input$criticsInput[1] & rtAllCriticsRating <= input$criticsInput[2],
+      rtAudienceRating >= input$AudienceInput[1] & rtAudienceRating <= input$AudienceInput[2],
+      facenumber_in_poster >= input$facenumber_in_poster[1] & facenumber_in_poster <= input$facenumber_in_poster[2],
+      title_year >= input$yearInput[1] & title_year <= input$yearInput[2]) %>% 
+      group_by(title_year, facenumber_in_poster) %>% dplyr::summarise(n=n()) %>% na.omit()
+  })
+  
+  output$filetable <- renderTable({
+    merge_imdb_rotten <- read.csv("E:/DataScience/DataWrangling/Project/1/data/movie_metadata.csv")
+    facenumber_in_poster >= input$facenumber_in_poster[1] & facenumber_in_poster <= input$facenumber_in_poster[2]
+  })
+  
+  output$main_plot <- renderPlot({
+    ggplot(reduced_df(), aes(title_year, n, color = facenumber_in_poster)) + geom_jitter()+ geom_line()+
+      ggtitle("Number of Movies by Year") +
+      labs(x = "Year",y = "Number of Movies",  color = "FaceNumber") +
+      theme_dark()
+    
+  }) 
+  output$results <- renderTable({ 
+    merge_imdb_rotten$gross <- format(as.numeric(merge_imdb_rotten$gross), big.mark=",", scientific=FALSE)
+    merge_imdb_rotten$rtAllCriticsRating <- as.integer(merge_imdb_rotten$rtAllCriticsRating)
+    merge_imdb_rotten$rtAudienceRating <- as.integer(merge_imdb_rotten$rtAudienceRating)
+    filter(
+      merge_imdb_rotten, 
+      country == input$countryinput,
+      rtAllCriticsRating  >= input$criticsInput[1] & rtAllCriticsRating <= input$criticsInput[2],
+      rtAudienceRating >= input$AudienceInput[1] & rtAudienceRating <= input$AudienceInput[2],
+      title_year >= input$yearInput[1] & title_year <= input$yearInput[2]) %>% 
+      select(title_year, gross, movie_title, rtAllCriticsRating, rtAudienceRating) %>% 
+      group_by(movie_title,rtAllCriticsRating,rtAudienceRating) %>% arrange(desc(gross)) %>% na.omit()
+  })
+}
+
+shinyApp(ui = ui, server = server)
+
+```
+
+
+
+
+
+
+
+
